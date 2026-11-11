@@ -4,7 +4,8 @@ set -euo pipefail
 root=$(cd -- "$(dirname -- "$0")" && pwd)
 runtime="$root/.faixalab"
 previous_revision=b02a77486eda28341da84d948c5f4a0cec22dcc6
-revision=9d402102d0befb6ec48e475190a0718ef820ab8f
+interface_revision=9d402102d0befb6ec48e475190a0718ef820ab8f
+revision=c0c210ec5e0ac9c5b49e0eb60417749ce7b0262b
 repository=https://github.com/Marcelo-Preigschadt/FaixaLab.git
 # The installed virtual environment and model links depend on this path.
 source="$runtime/source-$previous_revision"
@@ -27,17 +28,19 @@ mkdir -p "$runtime"
     git -C "$stage" checkout -q --detach "$revision"
     mv -- "$stage" "$source"
     trap - EXIT
-  elif [[ $(git -C "$source" rev-parse HEAD) == "$previous_revision" ]]; then
-    # This revision changes only static assets and their test. The server
-    # reads those assets from disk and can keep running during the update.
-    git -C "$source" fetch -q --depth=1 "$repository" "$revision"
-    git -C "$source" checkout -q --detach "$revision"
-    printf 'Interface atualizada. Recarregue a página do FaixaLab.\n'
-  fi
-
-  if [[ $(git -C "$source" rev-parse HEAD) != "$revision" ]]; then
-    printf 'A revisão do FaixaLab neste Codespace diverge da configuração de mvlab.\n' >&2
-    exit 1
+  else
+    case "$(git -C "$source" rev-parse HEAD)" in
+      "$revision") ;;
+      "$previous_revision"|"$interface_revision")
+        git -C "$source" fetch -q --depth=1 "$repository" "$revision"
+        git -C "$source" checkout -q --detach "$revision"
+        printf 'Código atualizado. Reinicie o servidor se ele já estiver em execução.\n'
+        ;;
+      *)
+        printf 'A revisão do FaixaLab neste Codespace diverge da configuração de mvlab.\n' >&2
+        exit 1
+        ;;
+    esac
   fi
 ) 8>"$runtime/source.lock"
 
