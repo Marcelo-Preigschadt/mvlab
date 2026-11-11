@@ -1,0 +1,5 @@
+{
+  "name": "FaixaLab",
+  "forwardPorts": [7860, 7861],
+  "postStartCommand": ["bash", "iniciar-faixalab.sh", "--background"]
+}

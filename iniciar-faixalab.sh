@@ -3,6 +3,17 @@ set -euo pipefail
 
 root=$(cd -- "$(dirname -- "$0")" && pwd)
 runtime="$root/.faixalab"
+
+if [[ ${1:-} == --background ]]; then
+  shift
+  mkdir -p "$runtime"
+  umask 077
+  log="$runtime/server.log"
+  setsid --fork bash "$root/iniciar-faixalab.sh" "$@" </dev/null >>"$log" 2>&1
+  printf 'Inicialização em segundo plano solicitada. Log em %s\n' "$log"
+  exit 0
+fi
+
 previous_revision=b02a77486eda28341da84d948c5f4a0cec22dcc6
 interface_revision=9d402102d0befb6ec48e475190a0718ef820ab8f
 origin_revision=c0c210ec5e0ac9c5b49e0eb60417749ce7b0262b
@@ -28,6 +39,12 @@ if [[ ! -f "$source/.app/FaixaLab/.release-sha256" && ! -f "$archive" ]]; then
 fi
 
 mkdir -p "$runtime"
+exec 9>"$runtime/server.lock"
+if ! flock -n 9; then
+  printf 'O FaixaLab já está iniciando ou em execução neste Codespace.\n'
+  exit 0
+fi
+
 (
   flock 8
   if [[ ! -d "$source" ]]; then
@@ -53,12 +70,6 @@ mkdir -p "$runtime"
     esac
   fi
 ) 8>"$runtime/source.lock"
-
-exec 9>"$runtime/server.lock"
-if ! flock -n 9; then
-  printf 'O FaixaLab já está iniciando ou em execução neste Codespace.\n'
-  exit 0
-fi
 
 if [[ ${CODESPACES:-} == true ]]; then
   export FAIXALAB_DATA_DIR="${FAIXALAB_DATA_DIR:-/workspaces/.faixalab-data}"
@@ -97,7 +108,7 @@ if [[ ! -x "$python" || ! -f "$app_runtime/cloud-ready" ]]; then
 fi
 
 if [[ ${CODESPACES:-} == true ]]; then
-  printf 'Abra a porta 7860 com visibilidade Private na aba Ports quando o servidor iniciar.\n'
+  printf 'Portas no Codespace: 7860 privada e 7861 pública.\n'
 fi
 cd app
 
