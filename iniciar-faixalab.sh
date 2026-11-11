@@ -12,7 +12,9 @@ source_api_revision=a1dc7e1f0520bf32f96c5fc11c8910c8265b70cc
 windows_bridge_revision=21bf7570ec5ee07862f684db966075dfab0cb9c6
 youtube_cookie_revision=92fcebf9148f1a0ccf908f27eaf09f3b33d28543
 pages_relay_revision=c73f6eed5b43544c6c04f478a0fa0b168270870f
-revision=3e12252ac6a449e14cd47471e3f41846d8d624e1
+pages_playback_revision=3e12252ac6a449e14cd47471e3f41846d8d624e1
+pages_session_revision=2aa918202387ed2a353435ae0c1ffd793b0de278
+revision=bfea016b29c9403394e83f4c470ecfca4db01d8f
 repository=https://github.com/Marcelo-Preigschadt/FaixaLab.git
 # The installed virtual environment and model links depend on this path.
 source="$runtime/source-$previous_revision"
@@ -38,7 +40,7 @@ mkdir -p "$runtime"
   else
     case "$(git -C "$source" rev-parse HEAD)" in
       "$revision") ;;
-      "$previous_revision"|"$interface_revision"|"$origin_revision"|"$linked_audio_revision"|"$stemsplit_revision"|"$source_api_revision"|"$windows_bridge_revision"|"$youtube_cookie_revision"|"$pages_relay_revision")
+      "$previous_revision"|"$interface_revision"|"$origin_revision"|"$linked_audio_revision"|"$stemsplit_revision"|"$source_api_revision"|"$windows_bridge_revision"|"$youtube_cookie_revision"|"$pages_relay_revision"|"$pages_playback_revision"|"$pages_session_revision")
         git -C "$source" fetch -q --depth=1 "$repository" "$revision"
         git -C "$source" checkout -q --detach "$revision"
         printf 'Código atualizado. Reinicie o servidor se ele já estiver em execução.\n'
@@ -100,6 +102,12 @@ cd app
 
 if [[ ${CODESPACES:-} == true ]]; then
   export FAIXALAB_PAGES_URL=https://marcelo-preigschadt.github.io/FaixaLab/
+  if [[ -n ${FAIXALAB_GOOGLE_CLIENT_ID:-} ]] &&
+     ! "$python" -c 'from google.oauth2.id_token import verify_oauth2_token; from google.auth.transport.requests import Request' >/dev/null 2>&1; then
+    uv_bin=$(command -v uv || true)
+    uv_bin=${uv_bin:-"$runtime/tools/bin/uv"}
+    "$uv_bin" pip install --python "$python" -r requirements-auth.txt
+  fi
   export FAIXALAB_PAGES_KEY
   FAIXALAB_PAGES_KEY=$("$python" -c 'import secrets; print(secrets.token_urlsafe(32))')
   env -u FAIXALAB_YOUTUBE_COOKIES "$python" -m faixalab.pages_gateway >"$FAIXALAB_DATA_DIR/pages-gateway.log" 2>&1 9>&- &
