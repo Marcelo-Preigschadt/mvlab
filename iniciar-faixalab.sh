@@ -8,7 +8,8 @@ interface_revision=9d402102d0befb6ec48e475190a0718ef820ab8f
 origin_revision=c0c210ec5e0ac9c5b49e0eb60417749ce7b0262b
 linked_audio_revision=02dd52c430119064a413cbcc250b9e39cdcbf18f
 stemsplit_revision=e8e1ebca8d7b0d8a57835c8809c64ebb8a2beb62
-revision=a1dc7e1f0520bf32f96c5fc11c8910c8265b70cc
+source_api_revision=a1dc7e1f0520bf32f96c5fc11c8910c8265b70cc
+revision=21bf7570ec5ee07862f684db966075dfab0cb9c6
 repository=https://github.com/Marcelo-Preigschadt/FaixaLab.git
 # The installed virtual environment and model links depend on this path.
 source="$runtime/source-$previous_revision"
@@ -34,7 +35,7 @@ mkdir -p "$runtime"
   else
     case "$(git -C "$source" rev-parse HEAD)" in
       "$revision") ;;
-      "$previous_revision"|"$interface_revision"|"$origin_revision"|"$linked_audio_revision"|"$stemsplit_revision")
+      "$previous_revision"|"$interface_revision"|"$origin_revision"|"$linked_audio_revision"|"$stemsplit_revision"|"$source_api_revision")
         git -C "$source" fetch -q --depth=1 "$repository" "$revision"
         git -C "$source" checkout -q --detach "$revision"
         printf 'Código atualizado. Reinicie o servidor se ele já estiver em execução.\n'
@@ -95,33 +96,7 @@ fi
 cd app
 
 if [[ ${CODESPACES:-} == true && -z ${FAIXALAB_AUDIO_SOURCE_URL:-} ]]; then
-  export FAIXALAB_AUDIO_SOURCE_URL=http://127.0.0.1:7870
-  export FAIXALAB_AUDIO_SOURCE_KEY
-  FAIXALAB_AUDIO_SOURCE_KEY=$("$python" -c 'import secrets; print(secrets.token_urlsafe(32))')
-  export FAIXALAB_AUDIO_SOURCE_DATA="$FAIXALAB_DATA_DIR/audio-source"
-  source_log="$FAIXALAB_DATA_DIR/audio-source.log"
-  "$python" -m faixalab.source_api >"$source_log" 2>&1 9>&- &
-  source_api_pid=$!
-  trap 'kill "$source_api_pid" 2>/dev/null || true; wait "$source_api_pid" 2>/dev/null || true' EXIT
-
-  source_ready=false
-  for _ in {1..40}; do
-    if printf 'Authorization: Bearer %s\n' "$FAIXALAB_AUDIO_SOURCE_KEY" |
-      curl --noproxy 127.0.0.1 --max-time 1 -fsS -H @- "$FAIXALAB_AUDIO_SOURCE_URL/v1/health" >/dev/null 2>&1; then
-      source_ready=true
-      break
-    fi
-    if ! kill -0 "$source_api_pid" 2>/dev/null; then break; fi
-    sleep .25
-  done
-  if [[ $source_ready != true ]]; then
-    printf 'A API de áudio não iniciou. Consulte %s.\n' "$source_log" >&2
-    exit 1
-  fi
-
-  printf 'API de áudio FaixaLab pronta em loopback.\n'
-  "$python" server.py --host "$host" --port "$PORT"
-  exit
+  export FAIXALAB_AUDIO_BRIDGE_FILE=/workspaces/.faixalab-data/audio-bridge.key
 fi
 
 exec "$python" server.py --host "$host" --port "$PORT"

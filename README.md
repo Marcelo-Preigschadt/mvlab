@@ -12,7 +12,16 @@
 
 A primeira execução confere o SHA-256 do ZIP, aplica os modelos ao código-fonte com a correção do player e instala o runtime CPU. Alguns modelos são baixados no primeiro processamento. Use o mesmo comando para retomar depois de parar o Codespace. Os projetos e os caches ficam em `/workspaces/.faixalab-data`.
 
-Na aba **Link do YouTube**, cole o link e inicie a separação. O inicializador sobe a API de áudio do FaixaLab no loopback, com uma chave gerada a cada execução. A API reutiliza o áudio salvo por ID do vídeo e a separação roda no servidor principal. A disponibilidade do áudio depende da resposta do YouTube à máquina que executa a API.
+## Link do YouTube com a instalação Windows
+
+Instale o [GitHub CLI](https://cli.github.com/) se precisar. Na primeira configuração, execute `gh auth login --web --scopes codespace` com a conta que criou o Codespace. Em um PowerShell aberto na pasta do FaixaLab Windows que contém `INSTALAR.bat`, execute os dois comandos abaixo.
+
+```powershell
+Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/Marcelo-Preigschadt/FaixaLab/21bf7570ec5ee07862f684db966075dfab0cb9c6/app/cloud/conectar_codespace.py' -OutFile "$env:TEMP\conectar_codespace.py"
+& '.\.venv\Scripts\python.exe' "$env:TEMP\conectar_codespace.py"
+```
+
+Quando aparecer `FaixaLab conectado`, cole o link na aba **Link do YouTube** do app. O extrator Windows entrega o áudio ao Codespace pelo túnel SSH privado. O Codespace executa a separação. Deixe o PC ligado e o PowerShell aberto enquanto estiver usando links. O script seleciona o Codespace de `mvlab` desta conta. Se houver mais de um em execução, passe `--codespace NOME` no segundo comando.
 
 Para executar a API de áudio em outra máquina, configure `FAIXALAB_AUDIO_SOURCE_URL` e `FAIXALAB_AUDIO_SOURCE_KEY` conforme as [instruções de instalação](https://github.com/Marcelo-Preigschadt/FaixaLab/blob/main/online/README.md#api-de-%C3%A1udio-do-faixalab). O Codespace usará essa instância para obter o áudio.
 
