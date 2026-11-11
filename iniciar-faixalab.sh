@@ -5,7 +5,8 @@ root=$(cd -- "$(dirname -- "$0")" && pwd)
 runtime="$root/.faixalab"
 previous_revision=b02a77486eda28341da84d948c5f4a0cec22dcc6
 interface_revision=9d402102d0befb6ec48e475190a0718ef820ab8f
-revision=c0c210ec5e0ac9c5b49e0eb60417749ce7b0262b
+origin_revision=c0c210ec5e0ac9c5b49e0eb60417749ce7b0262b
+revision=02dd52c430119064a413cbcc250b9e39cdcbf18f
 repository=https://github.com/Marcelo-Preigschadt/FaixaLab.git
 # The installed virtual environment and model links depend on this path.
 source="$runtime/source-$previous_revision"
@@ -31,7 +32,7 @@ mkdir -p "$runtime"
   else
     case "$(git -C "$source" rev-parse HEAD)" in
       "$revision") ;;
-      "$previous_revision"|"$interface_revision")
+      "$previous_revision"|"$interface_revision"|"$origin_revision")
         git -C "$source" fetch -q --depth=1 "$repository" "$revision"
         git -C "$source" checkout -q --detach "$revision"
         printf 'Código atualizado. Reinicie o servidor se ele já estiver em execução.\n'
