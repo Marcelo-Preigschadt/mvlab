@@ -3,8 +3,11 @@ set -euo pipefail
 
 root=$(cd -- "$(dirname -- "$0")" && pwd)
 runtime="$root/.faixalab"
-revision=b02a77486eda28341da84d948c5f4a0cec22dcc6
-source="$runtime/source-$revision"
+previous_revision=b02a77486eda28341da84d948c5f4a0cec22dcc6
+revision=9d402102d0befb6ec48e475190a0718ef820ab8f
+repository=https://github.com/Marcelo-Preigschadt/FaixaLab.git
+# The installed virtual environment and model links depend on this path.
+source="$runtime/source-$previous_revision"
 archive=${1:-"$root/FaixaLab_0_10_1_Windows.zip"}
 case "$archive" in /*) ;; *) archive="$PWD/$archive" ;; esac
 
@@ -14,24 +17,34 @@ if [[ ! -f "$source/.app/FaixaLab/.release-sha256" && ! -f "$archive" ]]; then
 fi
 
 mkdir -p "$runtime"
+(
+  flock 8
+  if [[ ! -d "$source" ]]; then
+    stage=$(mktemp -d "$runtime/source.XXXXXXXX")
+    trap 'rm -rf -- "$stage"' EXIT
+    git -C "$stage" init -q
+    git -C "$stage" fetch -q --depth=1 "$repository" "$revision"
+    git -C "$stage" checkout -q --detach "$revision"
+    mv -- "$stage" "$source"
+    trap - EXIT
+  elif [[ $(git -C "$source" rev-parse HEAD) == "$previous_revision" ]]; then
+    # This revision changes only static assets and their test. The server
+    # reads those assets from disk and can keep running during the update.
+    git -C "$source" fetch -q --depth=1 "$repository" "$revision"
+    git -C "$source" checkout -q --detach "$revision"
+    printf 'Interface atualizada. Recarregue a página do FaixaLab.\n'
+  fi
+
+  if [[ $(git -C "$source" rev-parse HEAD) != "$revision" ]]; then
+    printf 'A revisão do FaixaLab neste Codespace diverge da configuração de mvlab.\n' >&2
+    exit 1
+  fi
+) 8>"$runtime/source.lock"
+
 exec 9>"$runtime/server.lock"
 if ! flock -n 9; then
   printf 'O FaixaLab já está iniciando ou em execução neste Codespace.\n'
   exit 0
-fi
-
-if [[ ! -d "$source" ]]; then
-  stage=$(mktemp -d "$runtime/source.XXXXXXXX")
-  trap 'rm -rf -- "$stage"' EXIT
-  git -C "$stage" init -q
-  git -C "$stage" fetch -q --depth=1 https://github.com/Marcelo-Preigschadt/FaixaLab.git "$revision"
-  git -C "$stage" checkout -q --detach FETCH_HEAD
-  mv -- "$stage" "$source"
-  trap - EXIT
-fi
-if [[ $(git -C "$source" rev-parse HEAD) != "$revision" ]]; then
-  printf 'A revisão do FaixaLab neste Codespace diverge da configuração de mvlab.\n' >&2
-  exit 1
 fi
 
 if [[ ${CODESPACES:-} == true ]]; then
