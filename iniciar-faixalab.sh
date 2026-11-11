@@ -14,7 +14,8 @@ youtube_cookie_revision=92fcebf9148f1a0ccf908f27eaf09f3b33d28543
 pages_relay_revision=c73f6eed5b43544c6c04f478a0fa0b168270870f
 pages_playback_revision=3e12252ac6a449e14cd47471e3f41846d8d624e1
 pages_session_revision=2aa918202387ed2a353435ae0c1ffd793b0de278
-revision=bfea016b29c9403394e83f4c470ecfca4db01d8f
+pages_google_revision=bfea016b29c9403394e83f4c470ecfca4db01d8f
+revision=97638b9e24a155ace31dcf91514d7bd0677df906
 repository=https://github.com/Marcelo-Preigschadt/FaixaLab.git
 # The installed virtual environment and model links depend on this path.
 source="$runtime/source-$previous_revision"
@@ -40,7 +41,7 @@ mkdir -p "$runtime"
   else
     case "$(git -C "$source" rev-parse HEAD)" in
       "$revision") ;;
-      "$previous_revision"|"$interface_revision"|"$origin_revision"|"$linked_audio_revision"|"$stemsplit_revision"|"$source_api_revision"|"$windows_bridge_revision"|"$youtube_cookie_revision"|"$pages_relay_revision"|"$pages_playback_revision"|"$pages_session_revision")
+      "$previous_revision"|"$interface_revision"|"$origin_revision"|"$linked_audio_revision"|"$stemsplit_revision"|"$source_api_revision"|"$windows_bridge_revision"|"$youtube_cookie_revision"|"$pages_relay_revision"|"$pages_playback_revision"|"$pages_session_revision"|"$pages_google_revision")
         git -C "$source" fetch -q --depth=1 "$repository" "$revision"
         git -C "$source" checkout -q --detach "$revision"
         printf 'Código atualizado. Reinicie o servidor se ele já estiver em execução.\n'
