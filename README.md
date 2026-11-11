@@ -12,16 +12,13 @@
 
 A primeira execução confere o SHA-256 do ZIP, aplica os modelos ao código-fonte com a correção do player e instala o runtime CPU. Alguns modelos são baixados no primeiro processamento. Use o mesmo comando para retomar depois de parar o Codespace. Os projetos e os caches ficam em `/workspaces/.faixalab-data`.
 
-## Link do YouTube com a instalação Windows
+## Link do YouTube no Codespace
 
-Instale o [GitHub CLI](https://cli.github.com/) se precisar. Na primeira configuração, execute `gh auth login --web --scopes codespace` com a conta que criou o Codespace. Em um PowerShell aberto na pasta do FaixaLab Windows que contém `INSTALAR.bat`, execute os dois comandos abaixo.
+1. Exporte apenas os cookies do domínio `youtube.com` de uma sessão autorizada. Use o formato Netscape descrito nas [instruções do yt-dlp](https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies).
+2. Em [GitHub → Settings → Codespaces](https://github.com/settings/codespaces), crie o segredo pessoal `FAIXALAB_YOUTUBE_COOKIES`. Cole o conteúdo inteiro do `cookies.txt` no valor e conceda acesso somente ao repositório `mvlab`.
+3. Pare e reabra o Codespace para carregar o segredo. Inicie o FaixaLab com `bash iniciar-faixalab.sh` e cole o link na aba **Link do YouTube**.
 
-```powershell
-Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/Marcelo-Preigschadt/FaixaLab/21bf7570ec5ee07862f684db966075dfab0cb9c6/app/cloud/conectar_codespace.py' -OutFile "$env:TEMP\conectar_codespace.py"
-& '.\.venv\Scripts\python.exe' "$env:TEMP\conectar_codespace.py"
-```
-
-Quando aparecer `FaixaLab conectado`, cole o link na aba **Link do YouTube** do app. O extrator Windows entrega o áudio ao Codespace pelo túnel SSH privado. O Codespace executa a separação. Deixe o PC ligado e o PowerShell aberto enquanto estiver usando links. O script seleciona o Codespace de `mvlab` desta conta. Se houver mais de um em execução, passe `--codespace NOME` no segundo comando.
+O Codespace usa a sessão para solicitar o áudio e executa a separação. Se a sessão expirar, substitua o valor do segredo e reinicie o Codespace. Mantenha o arquivo de cookies e seu conteúdo fora do repositório.
 
 Para executar a API de áudio em outra máquina, configure `FAIXALAB_AUDIO_SOURCE_URL` e `FAIXALAB_AUDIO_SOURCE_KEY` conforme as [instruções de instalação](https://github.com/Marcelo-Preigschadt/FaixaLab/blob/main/online/README.md#api-de-%C3%A1udio-do-faixalab). O Codespace usará essa instância para obter o áudio.
 

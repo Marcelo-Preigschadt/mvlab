@@ -9,7 +9,8 @@ origin_revision=c0c210ec5e0ac9c5b49e0eb60417749ce7b0262b
 linked_audio_revision=02dd52c430119064a413cbcc250b9e39cdcbf18f
 stemsplit_revision=e8e1ebca8d7b0d8a57835c8809c64ebb8a2beb62
 source_api_revision=a1dc7e1f0520bf32f96c5fc11c8910c8265b70cc
-revision=21bf7570ec5ee07862f684db966075dfab0cb9c6
+windows_bridge_revision=21bf7570ec5ee07862f684db966075dfab0cb9c6
+revision=92fcebf9148f1a0ccf908f27eaf09f3b33d28543
 repository=https://github.com/Marcelo-Preigschadt/FaixaLab.git
 # The installed virtual environment and model links depend on this path.
 source="$runtime/source-$previous_revision"
@@ -35,7 +36,7 @@ mkdir -p "$runtime"
   else
     case "$(git -C "$source" rev-parse HEAD)" in
       "$revision") ;;
-      "$previous_revision"|"$interface_revision"|"$origin_revision"|"$linked_audio_revision"|"$stemsplit_revision"|"$source_api_revision")
+      "$previous_revision"|"$interface_revision"|"$origin_revision"|"$linked_audio_revision"|"$stemsplit_revision"|"$source_api_revision"|"$windows_bridge_revision")
         git -C "$source" fetch -q --depth=1 "$repository" "$revision"
         git -C "$source" checkout -q --detach "$revision"
         printf 'Código atualizado. Reinicie o servidor se ele já estiver em execução.\n'
@@ -94,9 +95,4 @@ if [[ ${CODESPACES:-} == true ]]; then
   printf 'Abra a porta 7860 com visibilidade Private na aba Ports quando o servidor iniciar.\n'
 fi
 cd app
-
-if [[ ${CODESPACES:-} == true && -z ${FAIXALAB_AUDIO_SOURCE_URL:-} ]]; then
-  export FAIXALAB_AUDIO_BRIDGE_FILE=/workspaces/.faixalab-data/audio-bridge.key
-fi
-
 exec "$python" server.py --host "$host" --port "$PORT"
