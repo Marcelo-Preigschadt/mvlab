@@ -2,6 +2,10 @@
   "remote.portsAttributes": {
     "7870": {
       "onAutoForward": "ignore"
+    },
+    "7861": {
+      "label": "FaixaLab GitHub Pages",
+      "onAutoForward": "ignore"
     }
   }
 }

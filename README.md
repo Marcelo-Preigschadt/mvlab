@@ -20,6 +20,10 @@ A primeira execução confere o SHA-256 do ZIP, aplica os modelos ao código-fon
 
 O Codespace usa a sessão para solicitar o áudio e executa a separação. Se a sessão expirar, substitua o valor do segredo e reinicie o Codespace. Mantenha o arquivo de cookies e seu conteúdo fora do repositório.
 
+## GitHub Pages
+
+Abra o [FaixaLab](https://marcelo-preigschadt.github.io/FaixaLab/) e clique em **Conectar ao FaixaLab**. O GitHub autentica o dono do Codespace pela porta privada `7860` e o redireciona ao Pages com uma sessão temporária. Mantenha `7860` **Private**. Encaminhe `7861` com visibilidade **Public** para que a interface alcance a API autenticada. Após parar e reiniciar o Codespace, confira a visibilidade de `7861` e refaça a conexão no site.
+
 Para executar a API de áudio em outra máquina, configure `FAIXALAB_AUDIO_SOURCE_URL` e `FAIXALAB_AUDIO_SOURCE_KEY` conforme as [instruções de instalação](https://github.com/Marcelo-Preigschadt/FaixaLab/blob/main/online/README.md#api-de-%C3%A1udio-do-faixalab). O Codespace usará essa instância para obter o áudio.
 
 Enquanto o FaixaLab estiver rodando no terminal do Codespace, ele informa o número de trabalhos na fila e em processamento a cada três minutos. O GitHub conta a saída do terminal como atividade. O [limite de 12 horas por sessão](https://docs.github.com/en/codespaces/about-codespaces/understanding-the-codespace-lifecycle#maximum-lifetime-of-a-codespace) continua aplicável.
