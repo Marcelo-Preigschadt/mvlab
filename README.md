@@ -36,3 +36,11 @@ O botão do Google entra no FaixaLab e abre a biblioteca da conta. A importaçã
 Para executar a API de áudio em outra máquina, configure `FAIXALAB_AUDIO_SOURCE_URL` e `FAIXALAB_AUDIO_SOURCE_KEY` conforme as [instruções de instalação](https://github.com/Marcelo-Preigschadt/FaixaLab/blob/main/online/README.md#api-de-%C3%A1udio-do-faixalab). O Codespace usará essa instância para obter o áudio.
 
 O servidor fica disponível enquanto o Codespace estiver ativo. Se o GitHub parar o Codespace, retome-o em [GitHub Codespaces](https://github.com/codespaces) para iniciar o servidor automaticamente.
+
+### Retomada automática pelo GitHub Actions
+
+O workflow **Retomar o FaixaLab** verifica a API a cada cinco minutos. Se a API estiver indisponível e o Codespace estiver em estado `Shutdown`, o workflow pede ao GitHub para iniciar o mesmo Codespace e espera a porta 7861 responder. A configuração existente do Codespace inicia o servidor e republica a porta quando a máquina volta.
+
+Para ativar uma vez, crie um [token de acesso pessoal refinado](https://github.com/settings/personal-access-tokens/new) do proprietário do Codespace, limitado ao repositório `mvlab`, com permissões **Codespaces: Read-only** e **Codespaces lifecycle admin: Read and write**. Salve-o como [segredo do GitHub Actions](https://github.com/Marcelo-Preigschadt/mvlab/settings/secrets/actions/new) chamado `FAIXALAB_CODESPACES_TOKEN`. Execute o workflow manualmente na aba **Actions** para conferir a configuração.
+
+A máquina ativa usa a cota de computação do Codespaces. O GitHub pode interromper sessões e atrasar a agenda do Actions. A retomada é automática após a interrupção. Para pausar a rotina, desative o workflow na aba **Actions** ou remova seu segredo.

@@ -1,0 +1,72 @@
+name: Retomar o FaixaLab
+
+'on':
+  schedule:
+    - cron: '2-57/5 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: faixalab-codespace
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    if: github.repository == 'Marcelo-Preigschadt/mvlab' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Verificar API e retomar o Codespace
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.FAIXALAB_CODESPACES_TOKEN }}
+          GH_PROMPT_DISABLED: '1'
+          FAIXALAB_CODESPACE: expert-space-funicular-gjxr569wq4939wg9
+          FAIXALAB_REPOSITORY_ID: '1453082577'
+        run: |
+          set -euo pipefail
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo 'Retomada desativada. Configure o segredo FAIXALAB_CODESPACES_TOKEN para ativar.'
+            exit 0
+          fi
+
+          health_url="https://$FAIXALAB_CODESPACE-7861.app.github.dev/health"
+          github_endpoint="/user/codespaces/$FAIXALAB_CODESPACE"
+          gateway_ready() {
+            local reply
+            reply=$(curl -fsS --max-time 5 -H 'Origin: https://marcelo-preigschadt.github.io' "$health_url" 2>/dev/null) || return 1
+            [[ "$reply" == '{"service":"faixalab-pages"}' ]]
+          }
+
+          if gateway_ready; then
+            echo 'FaixaLab disponível.'
+            exit 0
+          fi
+
+          codespace=$(timeout 15s gh api --hostname github.com -H 'X-GitHub-Api-Version: 2026-03-10' \
+            "$github_endpoint" --jq '[.repository.id, .state] | @tsv')
+          IFS=$'\t' read -r repository_id state <<< "$codespace"
+          if [[ "$repository_id" != "$FAIXALAB_REPOSITORY_ID" ]]; then
+            echo 'O Codespace retornado não pertence ao mvlab.' >&2
+            exit 1
+          fi
+
+          if [[ "$state" == 'Shutdown' ]]; then
+            echo 'Codespace parado. Solicitando a retomada ao GitHub.'
+            timeout 20s gh api --hostname github.com -H 'X-GitHub-Api-Version: 2026-03-10' \
+              --method POST "$github_endpoint/start" >/dev/null
+          else
+            echo "Estado do Codespace: $state. Aguardando a API."
+          fi
+
+          deadline=$((SECONDS + 85))
+          while (( SECONDS < deadline )); do
+            sleep 5
+            if gateway_ready; then
+              echo 'FaixaLab disponível. A porta 7861 respondeu.'
+              exit 0
+            fi
+          done
+          echo 'A porta 7861 ainda não respondeu. A próxima execução verifica novamente.' >&2
+          exit 1
