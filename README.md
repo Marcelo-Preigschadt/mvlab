@@ -3,7 +3,7 @@
 1. Abra o Codespace existente de `Marcelo-Preigschadt/mvlab` na branch `main`.
 2. No Explorer do Codespaces, envie `FaixaLab_0_10_1_Windows.zip` para a raiz de `mvlab`. O ZIP contém o servidor e os pesos dos modelos. Deixe o arquivo compactado.
 3. A configuração do contêiner inicia o servidor em segundo plano quando o Codespace inicia. Para aplicar a configuração em um Codespace existente, atualize o repositório com `git pull --ff-only` e execute **Codespaces: Rebuild Container** pela paleta de comandos do VS Code.
-4. Na aba **Portas**, mantenha `7860` **Privada** e configure `7861` como **Pública** para o GitHub Pages.
+4. A inicialização publica a porta `7861` com o GitHub CLI e verifica o acesso público para o GitHub Pages. A porta `7860` é privada e usada para a sessão do proprietário.
 
 Para iniciar imediatamente em segundo plano, use:
 
@@ -23,7 +23,9 @@ O Codespace usa a sessão para solicitar o áudio e executa a separação. Se a 
 
 ## GitHub Pages
 
-Abra o [FaixaLab](https://marcelo-preigschadt.github.io/FaixaLab/) e clique em **Conectar ao FaixaLab**. O GitHub autentica o dono do Codespace pela porta privada `7860` e o redireciona ao Pages com uma sessão temporária. Mantenha `7860` **Private**. Encaminhe `7861` com visibilidade **Public** para que a interface alcance a API autenticada. Após parar e reiniciar o Codespace, confira a visibilidade de `7861` e refaça a conexão no site.
+Abra o [FaixaLab](https://marcelo-preigschadt.github.io/FaixaLab/) e clique em **Conectar ao FaixaLab**. O GitHub autentica o dono do Codespace pela porta privada `7860` e o redireciona ao Pages com uma sessão temporária. Ao retomar o Codespace, o servidor verifica a API autenticada e reaplica a visibilidade pública da porta `7861`.
+
+Para aplicar a publicação em um servidor que já está rodando, execute `bash iniciar-faixalab.sh --publish-gateway` no terminal do Codespace.
 
 ### Entrada dos usuários com Google
 

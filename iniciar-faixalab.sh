@@ -4,6 +4,49 @@ set -euo pipefail
 root=$(cd -- "$(dirname -- "$0")" && pwd)
 runtime="$root/.faixalab"
 
+publish_pages_gateway() {
+  local gateway_pid=${1:-}
+  local name=${CODESPACE_NAME:-}
+  local domain=${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-app.github.dev}
+  if [[ ${CODESPACES:-} != true || ! $name =~ ^[a-z0-9-]+$ || ! $domain =~ ^[a-z0-9.-]+$ ]]; then
+    printf 'Execute a publicação da porta dentro do Codespace do FaixaLab.\n' >&2
+    return 1
+  fi
+
+  local local_gateway=http://127.0.0.1:7861
+  local public_gateway="https://$name-7861.$domain"
+  local expected_health='{"service":"faixalab-pages"}'
+  local deadline=$((SECONDS + 135))
+  local last_error=''
+  while (( SECONDS < deadline )); do
+    if [[ -n $gateway_pid ]] && ! kill -0 "$gateway_pid" 2>/dev/null; then
+      printf 'O gateway encerrou antes de publicar a porta 7861. Consulte pages-gateway.log.\n' >&2
+      return 1
+    fi
+    if [[ $(curl -fsS --max-time 3 "$local_gateway/health" 2>/dev/null) == "$expected_health" &&
+          $(curl -sS --max-time 3 -o /dev/null -w '%{http_code}' "$local_gateway/api/projects" 2>/dev/null) == 401 ]] &&
+       curl -fsS --max-time 3 http://127.0.0.1:7860/api/health >/dev/null 2>&1; then
+      if [[ $(curl -fsS --max-time 6 "$public_gateway/health" 2>/dev/null) == "$expected_health" ]]; then
+        printf 'Porta 7861 pública e verificada.\n'
+        return 0
+      fi
+      last_error=$(GH_PROMPT_DISABLED=1 timeout 12s gh codespace ports visibility 7861:public -c "$name" 2>&1) || true
+    fi
+    sleep 4
+  done
+
+  printf 'A porta 7861 ainda não respondeu publicamente após a inicialização.\n' >&2
+  if [[ -n $last_error ]]; then
+    printf '%s\n' "$last_error" >&2
+  fi
+  return 1
+}
+
+if [[ ${1:-} == --publish-gateway ]]; then
+  publish_pages_gateway
+  exit 0
+fi
+
 if [[ ${1:-} == --background ]]; then
   shift
   mkdir -p "$runtime"
@@ -125,6 +168,7 @@ if [[ ${CODESPACES:-} == true ]]; then
   env -u FAIXALAB_YOUTUBE_COOKIES "$python" -m faixalab.pages_gateway >"$FAIXALAB_DATA_DIR/pages-gateway.log" 2>&1 9>&- &
   pages_gateway_pid=$!
   trap 'kill "$pages_gateway_pid" 2>/dev/null || true; wait "$pages_gateway_pid" 2>/dev/null || true' EXIT
+  publish_pages_gateway "$pages_gateway_pid" 9>&- &
   "$python" server.py --host "$host" --port "$PORT"
   exit
 fi
