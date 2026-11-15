@@ -1,0 +1,41 @@
+name: Verificar o backend após retomar o FaixaLab
+on:
+  push:
+    branches: [confirmar-envio-android]
+permissions: {}
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Verificar separação local e respostas ao upload
+        env:
+          GH_TOKEN: ${{ secrets.FAIXALAB_CODESPACES_TOKEN }}
+          GH_PROMPT_DISABLED: '1'
+          CS: expert-space-funicular-gjxr569wq4939wg9
+        run: |
+          set -euo pipefail
+          read -r repo state < <(gh api "/user/codespaces/$CS" --jq '[.repository.id,.state] | @tsv')
+          test "$repo" = 1453082577
+          echo "Codespace $state"
+          test "$state" = Available
+          timeout 45s gh codespace ssh -c "$CS" -- -T 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          curl -fsS --max-time 5 http://127.0.0.1:7860/api/health | python3 -c 'import json, sys; data = json.load(sys.stdin); print("API de separação em 7860", data.get("status"), "| Demucs detectado", data.get("engines", {}).get("demucs")); assert data.get("status") == "ok" and data.get("engines", {}).get("demucs") is True'
+          python3 - <<'PY'
+          from collections import Counter
+          from pathlib import Path
+          import re
+
+          counts = Counter()
+          log = Path('/workspaces/.faixalab-data/pages-gateway.log')
+          if log.is_file():
+              with log.open(errors='replace') as lines:
+                  for line in lines:
+                      match = re.search(r'"POST /api/import/file HTTP/[^ ]+" (\d{3})\b', line)
+                      if match:
+                          counts[match[1]] += 1
+          print('Respostas HTTP de upload nesta inicialização:', dict(counts))
+          PY
+          REMOTE
+
