@@ -1,0 +1,60 @@
+name: Verificar acesso público do FaixaLab
+on:
+  push:
+    branches: [verificar-faixalab-online]
+permissions: {}
+concurrency:
+  group: faixalab-codespace
+  cancel-in-progress: false
+jobs:
+  gateway:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ secrets.FAIXALAB_CODESPACES_TOKEN }}
+      GH_PROMPT_DISABLED: '1'
+      CS: expert-space-funicular-gjxr569wq4939wg9
+      SITE_ORIGIN: https://marcelo-preigschadt.github.io
+    steps:
+      - name: Testar a porta pública e recuperar encaminhamento
+        run: |
+          set -euo pipefail
+          test -n "${GH_TOKEN:-}"
+          vm_endpoint="/user/codespaces/$CS"
+          domain="https://$CS-7861.app.github.dev"
+          metadata=$(gh api "$vm_endpoint" --jq '[.repository.id, .state, .idle_timeout_minutes] | @tsv')
+          IFS=$'\t' read -r repository_id state idle <<< "$metadata"
+          test "$repository_id" = 1453082577
+          echo "Codespace: $state. Limite de inatividade: $idle min."
+          if [[ "$state" == Shutdown ]]; then
+            gh api --method POST "$vm_endpoint/start" >/dev/null
+          fi
+          health() {
+            local body
+            body=$(curl -fsS --max-time 7 -H 'Cache-Control: no-cache' -H "Origin: $SITE_ORIGIN" "$domain/health") || return 1
+            [[ "$body" == '{"service":"faixalab-pages"}' ]]
+          }
+          for attempt in {1..15}; do
+            if health; then break; fi
+            if [[ "$attempt" == 9 ]]; then
+              timeout 12s gh codespace ports visibility 7861:public -c "$CS" || true
+            fi
+            sleep 5
+          done
+          health
+          echo 'Saúde pública: HTTP 200 com resposta esperada.'
+          timeout 15s gh codespace ports -c "$CS" --json sourcePort,visibility,browseUrl --jq '.[] | select(.sourcePort == 7861)' || true
+          tmp=$(mktemp -d)
+          trap 'rm -rf "$tmp"' EXIT
+          auth=$(curl -sS -o "$tmp/auth.json" -D "$tmp/auth.headers" --max-time 12 -w '%{http_code}' -H "Origin: $SITE_ORIGIN" "$domain/auth/google/config")
+          echo "Configuração do login via origem real do site: HTTP $auth."
+          test "$auth" = 200
+          jq -e '(.client_id|type == "string") and (.nonce|type == "string")' "$tmp/auth.json" >/dev/null
+          tr -d '\r' < "$tmp/auth.headers" | grep -Fxi "access-control-allow-origin: $SITE_ORIGIN"
+          preflight=$(curl -sS --max-time 10 -o /dev/null -D "$tmp/upload.headers" -w '%{http_code}' -X OPTIONS -H "Origin: $SITE_ORIGIN" -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: authorization' "$domain/api/import/file")
+          echo "Pré-verificação de upload pelo navegador: HTTP $preflight."
+          test "$preflight" = 200
+          tr -d '\r' < "$tmp/upload.headers" | grep -Fxi "access-control-allow-origin: $SITE_ORIGIN"
+          public=$(curl -sS -o /dev/null --max-time 10 -w '%{http_code}' -H "Origin: $SITE_ORIGIN" "$domain/api/projects")
+          echo "Consulta de biblioteca sem login: HTTP $public."
+          test "$public" = 401
