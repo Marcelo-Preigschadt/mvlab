@@ -1,0 +1,45 @@
+name: Verificar a retomada publicada
+on:
+  push:
+    branches: [verificar-retomada-publicada]
+permissions: {}
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      SITE: https://marcelo-preigschadt.github.io/FaixaLab
+      ORIGIN: https://marcelo-preigschadt.github.io
+      WAKE: https://faixalab-retomada.onrender.com
+      GATEWAY: https://expert-space-funicular-gjxr569wq4939wg9-7861.app.github.dev
+      GH_TOKEN: ${{ secrets.FAIXALAB_CODESPACES_TOKEN }}
+      CS: expert-space-funicular-gjxr569wq4939wg9
+    steps:
+      - name: Validar GitHub Pages, Render, gateway e Demucs
+        run: |
+          set -euo pipefail
+          for i in {1..25}; do
+            if curl -fsS --max-time 8 "$SITE/?retomada=${{ github.sha }}" -o site.html &&
+                grep -Fq 'pages-config.js?v=524b21c82d66' site.html &&
+                grep -Fq 'pages-connection.js?v=68d0050dd45a' site.html; then break; fi
+            sleep 4
+          done
+          grep -F 'pages-config.js?v=524b21c82d66' site.html
+          grep -F 'pages-connection.js?v=68d0050dd45a' site.html
+          curl -fsS --max-time 8 "$SITE/pages-config.js?v=524b21c82d66" | grep -F "$WAKE"
+          curl -fsS --max-time 85 "$WAKE/wake/health" | jq -e '.service == "faixalab-wake" and .configured == true'
+          curl -fsS --max-time 8 "$GATEWAY/health" | jq -e '.service == "faixalab-pages"'
+          broker_status=$(curl -sS --max-time 12 -o /dev/null -w '%{http_code}' -X POST -H "Origin: $ORIGIN" -H 'Authorization: Bearer invalid-smoke-test' "$WAKE/wake")
+          [[ "$broker_status" == 401 ]]
+          gateway_status=$(curl -sS --max-time 12 -o /dev/null -w '%{http_code}' -X POST -H "Origin: $ORIGIN" -H 'Content-Type: application/json' --data '{"credential":"invalid-smoke-test"}' "$GATEWAY/auth/google/portal-session")
+          [[ "$gateway_status" == 401 ]]
+          echo "Credencial inválida foi recusada pelo Render ($broker_status) e pelo Codespace ($gateway_status)."
+          read -r repo state < <(gh api "/user/codespaces/$CS" --jq '[.repository.id, .state] | @tsv')
+          test "$repo" = 1453082577
+          test "$state" = Available
+          timeout 40s gh codespace ssh -c "$CS" -- -T 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /workspaces/mvlab/.faixalab/source-b02a77486eda28341da84d948c5f4a0cec22dcc6
+          test "$(git rev-parse HEAD)" = f6607122c5d11638057f53377a8b5505415abac6
+          curl -fsS --max-time 5 http://127.0.0.1:7860/api/health | python3 -c 'import json, sys; d = json.load(sys.stdin); assert d["status"] == "ok" and d["engines"]["demucs"] is True; print("API e Demucs prontos.")'
+          REMOTE
