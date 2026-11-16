@@ -1,8 +1,6 @@
 name: Retomar o FaixaLab
 
 'on':
-  schedule:
-    - cron: '2-57/5 * * * *'
   workflow_dispatch:
 
 permissions: {}
@@ -68,5 +66,5 @@ jobs:
               exit 0
             fi
           done
-          echo 'A porta 7861 ainda não respondeu. A próxima execução verifica novamente.' >&2
+          echo 'A porta 7861 ainda não respondeu. Tente retomar novamente pelo FaixaLab.' >&2
           exit 1
