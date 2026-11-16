@@ -1,0 +1,66 @@
+name: Preparar credenciais de retomada do FaixaLab
+on:
+  push:
+    branches: [preparar-retomada-faixalab]
+permissions: {}
+jobs:
+  preparar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ secrets.FAIXALAB_CODESPACES_TOKEN }}
+      GH_PROMPT_DISABLED: '1'
+      CS: expert-space-funicular-gjxr569wq4939wg9
+      KEY_PUB: 'LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQm9qQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FZOEFNSUlCaWdLQ0FZRUF3b0RPRitEbG1sVU1SekR6K0o3Mwprc0NKTGNKVmtYQ2xVY1RkT25JME4rOTkySFVQRWpucWMraWpCYnh1V2pBYlh0Z2QrYmVxQ2JKSkhQTGFRWWwvCmdiTWRwSVg1a1h1ZmlpV1FZVnNBZ2VHcXVPekdObGRsMTVVdEVDdXA5SERFMW9BQkJpVWdvVktRMmJ6c2tqK2oKdmpNOE1ka1lYcVgrK2I4Vm5xTkY0Zm1UT3NKQWIvM3dFdUlXTXN1azdDQjBybDVWNjVuUjZsb1RHVnc1TnJLdgpZTTMzZ2d4bWxucW9LWUFWZ0ZXZmhhWjdOd3B1dDNaSDNRbDBJSUxDOStuUGp1cUJoaERoQUFmWDNnR0hISllDClRTWjdpbk1rSmxENTUrNUtQdFNIbEZ0aE94UGdIeGUxUWx0RjdhSksvWDNZMndsaHJBbzZQRWdnc1Nac2lUZUcKK0JlK01aSmNLcnNjcVAvMkZqQWdsZnZsZFZzakUveU9kRG05YmVYUG9rUjRIamhxU0xGeFFxTWlMbURHWGhjeApDVVRPMURkd21JYXV5RDh5YnBsRE9Jd2lZVkw4TFpUVzhDZUhRT2VnczdyVitYVk82WFplQkxkQ1pRUDV2V2VQCmlaUjJhTFRoeWFFNnZDN1lhYmRFaXF6WG8wQkU2THNQemgzUlZHVDRaNWgvQWdNQkFBRT0KLS0tLS1FTkQgUFVCTElDIEtFWS0tLS0tCg=='
+    steps:
+      - name: Provisionar a assinatura da sessão e lacrar a configuração
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$GH_TOKEN"
+          endpoint="/user/codespaces/$CS"
+          read -r repo state < <(gh api "$endpoint" --jq '[.repository.id,.state]|@tsv')
+          test "$repo" = 1453082577
+          if [[ "$state" == Shutdown ]]; then gh api --method POST "$endpoint/start" >/dev/null; fi
+          for i in {1..35}; do
+            state=$(gh api "$endpoint" --jq .state)
+            if [[ "$state" == Available ]]; then break; fi
+            sleep 3
+          done
+          test "$state" = Available
+          control="https://$CS-7861.app.github.dev"
+          for i in {1..20}; do
+            if config=$(curl -fsS --max-time 5 -H 'Origin: https://marcelo-preigschadt.github.io' "$control/auth/google/config" 2>/dev/null) && jq -e '.client_id | type == "string" and endswith(".apps.googleusercontent.com")' >/dev/null <<<"$config"; then break; fi
+            sleep 3
+          done
+          client=$(jq -re .client_id <<<"$config")
+          printf '%s' "$KEY_PUB" | base64 -d > "$RUNNER_TEMP/faixa-public.pem"
+          timeout 45s gh codespace ssh -c "$CS" -- -T 'python3 -' > "$RUNNER_TEMP/faixa-key-output" <<'REMOTE'
+          from pathlib import Path
+          import os
+          import secrets
+
+          root = Path(os.environ.get('FAIXALAB_DATA_DIR', '/workspaces/.faixalab-data'))
+          root.mkdir(exist_ok=True)
+          path = root / 'pages-session.key'
+          if not path.exists():
+              temp = root / ('.pages-key-' + secrets.token_hex(8))
+              with os.fdopen(os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'w') as out:
+                  out.write(secrets.token_urlsafe(32) + '\n')
+              try:
+                  os.link(temp, path)
+              except FileExistsError:
+                  pass
+              finally:
+                  temp.unlink()
+          print(path.read_text().strip())
+          REMOTE
+          signing_key=$(grep -Ex '[A-Za-z0-9_-]{43}' "$RUNNER_TEMP/faixa-key-output")
+          printf '::add-mask::%s\n' "$signing_key"
+          rm -f "$RUNNER_TEMP/faixa-key-output"
+          seal() {
+            openssl pkeyutl -encrypt -pubin -inkey "$RUNNER_TEMP/faixa-public.pem" -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256 | base64 -w0
+          }
+          sealed_token=$(printf '%s' "$GH_TOKEN" | seal)
+          sealed_signing=$(printf '%s' "$signing_key" | seal)
+          printf 'FAIXALAB_BUNDLE_V1 %s %s %s\n' "$sealed_token" "$sealed_signing" "$client"
