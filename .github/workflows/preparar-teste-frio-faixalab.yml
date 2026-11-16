@@ -1,0 +1,55 @@
+name: Preparar o Codespace para o teste de retomada
+on:
+  push:
+    branches: [preparar-teste-frio-faixalab]
+permissions: {}
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      GH_TOKEN: ${{ secrets.FAIXALAB_CODESPACES_TOKEN }}
+      GH_PROMPT_DISABLED: '1'
+      CS: expert-space-funicular-gjxr569wq4939wg9
+    steps:
+      - name: Sincronizar a revisão e aguardar o Codespace desligado
+        run: |
+          set -euo pipefail
+          endpoint="/user/codespaces/$CS"
+          read -r repo state < <(gh api "$endpoint" --jq '[.repository.id, .state] | @tsv')
+          test "$repo" = 1453082577
+          if [[ "$state" == Shutdown ]]; then gh api --method POST "$endpoint/start" >/dev/null; fi
+          for i in {1..45}; do
+            state=$(gh api "$endpoint" --jq .state)
+            if [[ "$state" == Available ]]; then break; fi
+            sleep 3
+          done
+          test "$state" = Available
+          sleep 5
+          timeout 55s gh codespace ssh -c "$CS" -- -T 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /workspaces/mvlab
+          test "$(git branch --show-current)" = main
+          test -z "$(git status --porcelain --untracked-files=no)"
+          git fetch --quiet origin main
+          test "$(git rev-parse FETCH_HEAD)" = 2bd8ee2b67f90a68044f4844e21e05b56299d46b
+          git merge --ff-only --quiet FETCH_HEAD
+          bash -n iniciar-faixalab.sh
+          printf 'Checkout atualizado para %s.\n' "$(git rev-parse HEAD)"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          active = sum(json.loads(path.read_text()).get('status') in {'queued', 'processing'}
+                       for path in Path('/workspaces/.faixalab-data/projects').rglob('project.json'))
+          print('Projetos na fila ou em processamento:', active)
+          if active:
+              raise SystemExit('Servidor em uso. Adiando o teste de desligamento.')
+          PY
+          REMOTE
+          gh api --method POST "$endpoint/stop" >/dev/null
+          for i in {1..20}; do
+            state=$(gh api "$endpoint" --jq .state)
+            if [[ "$state" == Shutdown ]]; then echo 'ESTADO_CONFIRMADO=Shutdown'; exit 0; fi
+            sleep 3
+          done
+          exit 1
