@@ -69,7 +69,19 @@ pages_relay_revision=c73f6eed5b43544c6c04f478a0fa0b168270870f
 pages_playback_revision=3e12252ac6a449e14cd47471e3f41846d8d624e1
 pages_session_revision=2aa918202387ed2a353435ae0c1ffd793b0de278
 pages_google_revision=bfea016b29c9403394e83f4c470ecfca4db01d8f
-revision=97638b9e24a155ace31dcf91514d7bd0677df906
+stable_revision=97638b9e24a155ace31dcf91514d7bd0677df906
+wake_revision=c1197fb01325b728e7f5409fae4c1c8ebdef2558
+revision=$stable_revision
+wake_key_file="$root/faixalab-wake-public-key.txt"
+if [[ ${CODESPACES:-} == true && -r "$wake_key_file" ]]; then
+  FAIXALAB_WAKE_PUBLIC_KEY=$(<"$wake_key_file")
+  if [[ ! "$FAIXALAB_WAKE_PUBLIC_KEY" =~ ^[a-f0-9]{64}$ ]]; then
+    printf 'Chave pública da retomada inválida.\n' >&2
+    exit 1
+  fi
+  export FAIXALAB_WAKE_PUBLIC_KEY
+  revision=$wake_revision
+fi
 repository=https://github.com/Marcelo-Preigschadt/FaixaLab.git
 # The installed virtual environment and model links depend on this path.
 source="$runtime/source-$previous_revision"
@@ -101,7 +113,7 @@ fi
   else
     case "$(git -C "$source" rev-parse HEAD)" in
       "$revision") ;;
-      "$previous_revision"|"$interface_revision"|"$origin_revision"|"$linked_audio_revision"|"$stemsplit_revision"|"$source_api_revision"|"$windows_bridge_revision"|"$youtube_cookie_revision"|"$pages_relay_revision"|"$pages_playback_revision"|"$pages_session_revision"|"$pages_google_revision")
+      "$stable_revision"|"$wake_revision"|"$previous_revision"|"$interface_revision"|"$origin_revision"|"$linked_audio_revision"|"$stemsplit_revision"|"$source_api_revision"|"$windows_bridge_revision"|"$youtube_cookie_revision"|"$pages_relay_revision"|"$pages_playback_revision"|"$pages_session_revision"|"$pages_google_revision")
         git -C "$source" fetch -q --depth=1 "$repository" "$revision"
         git -C "$source" checkout -q --detach "$revision"
         printf 'Código atualizado. Reinicie o servidor se ele já estiver em execução.\n'
@@ -163,6 +175,12 @@ if [[ ${CODESPACES:-} == true ]]; then
     uv_bin=${uv_bin:-"$runtime/tools/bin/uv"}
     "$uv_bin" pip install --python "$python" -r requirements-auth.txt
   fi
+  if [[ -n ${FAIXALAB_WAKE_PUBLIC_KEY:-} ]] &&
+     ! "$python" -c 'from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey' >/dev/null 2>&1; then
+    uv_bin=$(command -v uv || true)
+    uv_bin=${uv_bin:-"$runtime/tools/bin/uv"}
+    "$uv_bin" pip install --python "$python" 'cryptography>=44,<50'
+  fi
   export FAIXALAB_PAGES_KEY
   FAIXALAB_PAGES_KEY=$("$python" -c 'import secrets; print(secrets.token_urlsafe(32))')
   env -u FAIXALAB_YOUTUBE_COOKIES "$python" -m faixalab.pages_gateway >"$FAIXALAB_DATA_DIR/pages-gateway.log" 2>&1 9>&- &
@@ -174,3 +192,4 @@ if [[ ${CODESPACES:-} == true ]]; then
 fi
 
 exec "$python" server.py --host "$host" --port "$PORT"
+
