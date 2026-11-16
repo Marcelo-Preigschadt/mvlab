@@ -1,0 +1,38 @@
+name: Verificar a configuração ativa da retomada
+on:
+  push:
+    branches: [verificar-retomada-configurada]
+permissions: {}
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      GH_TOKEN: ${{ secrets.FAIXALAB_CODESPACES_TOKEN }}
+      GH_PROMPT_DISABLED: '1'
+      CS: expert-space-funicular-gjxr569wq4939wg9
+      URL: https://faixalab-retomada.onrender.com
+    steps:
+      - name: Conferir configuração do Render e estado do Codespace
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 85 "$URL/wake/health" | jq -e '.service == "faixalab-wake" and .configured == true'
+          read -r repo state < <(gh api "/user/codespaces/$CS" --jq '[.repository.id, .state] | @tsv')
+          test "$repo" = 1453082577
+          echo "Codespace $state"
+          if [[ "$state" != Available ]]; then exit 0; fi
+          timeout 40s gh codespace ssh -c "$CS" -- -T 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /workspaces/mvlab
+          printf 'Checkout %s %s. Arquivos modificados: %s\n' "$(git branch --show-current)" "$(git rev-parse HEAD)" "$(git status --porcelain | wc -l)"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          active = 0
+          for path in Path('/workspaces/.faixalab-data/projects').rglob('project.json'):
+              state = json.loads(path.read_text())
+              if state.get('status') in {'queued','processing'}:
+                  active += 1
+          print('Projetos na fila ou em processamento:', active)
+          PY
+          REMOTE
