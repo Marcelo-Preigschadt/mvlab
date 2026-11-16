@@ -1,0 +1,22 @@
+name: Validar o acionamento da retomada
+on:
+  push:
+    branches: [validar-disparo-faixalab]
+permissions:
+  actions: write
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_PROMPT_DISABLED: '1'
+    steps:
+      - name: Disparar o workflow oficial e confirmar a saúde pública
+        run: |
+          set -euo pipefail
+          id=$(gh api --method POST -H 'X-GitHub-Api-Version: 2026-03-10' "repos/$GITHUB_REPOSITORY/actions/workflows/faixalab-codespace.yml/dispatches" -f ref=main --jq .workflow_run_id)
+          [[ "$id" =~ ^[0-9]+$ ]]
+          printf 'Workflow oficial acionado: %s\n' "$id"
+          gh run watch "$id" --repo "$GITHUB_REPOSITORY" --exit-status --interval 5
+          curl -fsS --max-time 8 -H 'Origin: https://marcelo-preigschadt.github.io' 'https://expert-space-funicular-gjxr569wq4939wg9-7861.app.github.dev/health' | jq -e '.service == "faixalab-pages"'
