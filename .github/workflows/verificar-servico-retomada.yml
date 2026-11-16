@@ -1,0 +1,22 @@
+name: Verificar o serviço de retomada
+on:
+  push:
+    branches: [validar-servico-retomada]
+permissions: {}
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      URL: https://faixalab-retomada.onrender.com
+      ORIGIN: https://marcelo-preigschadt.github.io
+    steps:
+      - name: Conferir rotas de retomada e login
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 85 "$URL/wake/health" | jq -e 'select(.service == "faixalab-wake" and (.configured | type == "boolean"))'
+          curl -fsS --max-time 15 -D headers -H "Origin: $ORIGIN" "$URL/auth/google/config" | jq -e '(.client_id | endswith(".apps.googleusercontent.com")) and (.nonce | length == 43)' >/dev/null
+          tr -d '\r' <headers | grep -Fxi "access-control-allow-origin: $ORIGIN"
+          result=$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' -X POST -H "Origin: $ORIGIN" "$URL/wake")
+          [[ "$result" == 401 || "$result" == 503 ]]
+          echo "Retomada sem sessão recusada com HTTP $result."
