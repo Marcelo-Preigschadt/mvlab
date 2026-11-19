@@ -1,122 +1,73 @@
-name: Aplicar padrão de áudio de estúdio
+name: Verificar recursos do separador
 on:
   push:
     branches: [aplicar-padrao-estudio]
 permissions:
   contents: read
-  statuses: write
-concurrency:
-  group: faixalab-codespace
-  cancel-in-progress: false
 jobs:
-  update:
-    if: github.repository == 'Marcelo-Preigschadt/mvlab'
+  resources:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 3
     steps:
-      - name: Atualizar o processador instalado no Codespace
+      - name: Consultar a execução atual
         env:
           GH_TOKEN: ${{ secrets.FAIXALAB_CODESPACES_TOKEN }}
           GH_PROMPT_DISABLED: '1'
           FAIXALAB_CODESPACE: expert-space-funicular-gjxr569wq4939wg9
         run: |
           set -euo pipefail
-          if [[ -z "${GH_TOKEN:-}" ]]; then
-            echo 'O segredo FAIXALAB_CODESPACES_TOKEN não está configurado.' >&2
-            exit 1
-          fi
-          repository_id=$(gh api "/user/codespaces/$FAIXALAB_CODESPACE" --jq .repository.id)
-          if [[ "$repository_id" != 1453082577 ]]; then
-            echo 'O Codespace retornado não pertence ao mvlab.' >&2
-            exit 1
-          fi
-          cat > "$RUNNER_TEMP/apply-studio.py" <<'PY'
-          import fcntl
+          cat > "$RUNNER_TEMP/recursos.py" <<'PY'
           import json
           import os
           from pathlib import Path
-          import signal
-          import subprocess
           import time
-          import urllib.request
           
-          root = Path('/workspaces/mvlab')
-          source = root / '.faixalab/source-b02a77486eda28341da84d948c5f4a0cec22dcc6'
-          if not (root / '.git').exists() or not (source / '.git').exists():
-              raise SystemExit('O checkout do FaixaLab não está no local esperado.')
-          socket_inodes = set()
-          for table in ('/proc/net/tcp', '/proc/net/tcp6'):
-              for line in Path(table).read_text().splitlines()[1:]:
-                  fields = line.split()
-                  if fields[1].split(':')[-1] == format(7860, '04X') and fields[3] == '0A':
-                      socket_inodes.add(fields[9])
-          processes = []
-          for item in Path('/proc').iterdir():
-              if not item.name.isdigit():
+          def read(path):
+              try:
+                  return Path(path).read_text().strip()
+              except OSError:
+                  return None
+          
+          limits = {'cpu_count': os.cpu_count(), 'affinity': len(os.sched_getaffinity(0)),
+                    'cpu_max': read('/sys/fs/cgroup/cpu.max'),
+                    'cpu_stats': read('/sys/fs/cgroup/cpu.stat'),
+                    'memory_current': read('/sys/fs/cgroup/memory.current'),
+                    'memory_max': read('/sys/fs/cgroup/memory.max'),
+                    'memory_pressure': read('/proc/pressure/memory'),
+                    'nvidia_devices': [str(p) for p in Path('/dev').glob('nvidia[0-9]*')]}
+          print('RECURSOS', json.dumps(limits))
+          for item in Path('/workspaces/.faixalab-data/projects').glob('*/project.json'):
+              value = json.loads(item.read_text())
+              if value.get('status') in ('queued', 'processing'):
+                  print('PROCESSAMENTO', json.dumps({key: value.get(key) for key in
+                        ('status', 'stage', 'progress', 'duration', 'elapsed_seconds', 'worker_runtime', 'options')}))
+          workers = []
+          for process in Path('/proc').iterdir():
+              if not process.name.isdigit():
                   continue
               try:
-                  for descriptor in (item / 'fd').iterdir():
-                      if os.readlink(descriptor) in {'socket:[' + inode + ']' for inode in socket_inodes}:
-                          processes.append(item)
-                          break
-              except (OSError, PermissionError):
+                  args = (process / 'cmdline').read_bytes().split(bytes([0]))
+                  if b'faixalab.separator_runner' not in args:
+                      continue
+                  env = dict(os.fsdecode(part).split('=', 1) for part in
+                             (process / 'environ').read_bytes().split(bytes([0])) if b'=' in part)
+                  status = (process / 'status').read_text().splitlines()
+                  ticks = (process / 'stat').read_text().rsplit(')', 1)[1].split()
+                  workers.append((process, int(ticks[11]) + int(ticks[12])))
+                  print('WORKER', json.dumps({'pid': process.name,
+                        'runtime': [line for line in status if line.startswith(('VmRSS:', 'VmSwap:', 'Threads:'))],
+                        'threads': {key: env.get(key) for key in
+                                    ('FAIXALAB_CPU_THREADS', 'OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'OPENBLAS_NUM_THREADS')}}))
+              except OSError:
                   continue
-          if len(processes) != 1:
-              raise SystemExit('Não foi possível identificar o processo que atende à porta 7860.')
-          running_directory = (processes[0] / 'cwd').resolve()
-          if running_directory != (source / 'app').resolve():
-              print('Diretório do servidor:', str(running_directory))
-              raise SystemExit('O servidor usa um checkout diferente do esperado.')
-          process = processes[0]
-          environment = dict(os.fsdecode(part).split('=', 1) for part in (process / 'environ').read_bytes().split(bytes([0])) if b'=' in part)
-          data = Path(environment.get('FAIXALAB_DATA_DIR', '/workspaces/.faixalab-data'))
-          for metadata in (data / 'projects').glob('*/project.json'):
-              project = json.loads(metadata.read_text())
-              if project.get('status') in ('queued', 'processing') or (project.get('tablature') or {}).get('status') in ('queued', 'processing'):
-                  raise SystemExit('Há uma música em processamento. A atualização pode ser repetida quando terminar.')
-          subprocess.run(['git', '-C', str(root), 'diff', '--quiet'], check=True)
-          subprocess.run(['git', '-C', str(source), 'diff', '--quiet'], check=True)
-          subprocess.run(['git', '-C', str(root), 'fetch', '-q', '--depth=100', 'origin', 'main'], check=True)
-          subprocess.run(['git', '-C', str(root), 'merge', '--ff-only', 'FETCH_HEAD'], check=True)
-          subprocess.run(['git', '-C', str(source), 'fetch', '-q', '--depth=1',
-                          'https://github.com/Marcelo-Preigschadt/FaixaLab.git', 'eb4711c928f9b49baa087be358244d98a513dc5e'], check=True)
-          subprocess.run(['git', '-C', str(source), 'checkout', '-q', '--detach', 'eb4711c928f9b49baa087be358244d98a513dc5e'], check=True)
-          os.kill(int(process.name), signal.SIGTERM)
-          with (root / '.faixalab/server.lock').open('a') as lock:
-              for attempt in range(40):
-                  try:
-                      fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                      fcntl.flock(lock, fcntl.LOCK_UN)
-                      break
-                  except BlockingIOError:
-                      time.sleep(1)
-              else:
-                  raise SystemExit('O processo anterior ainda está encerrando.')
-          subprocess.run(['bash', str(root / 'iniciar-faixalab.sh'), '--background'],
-                         env=environment, cwd=root, check=True)
-          for attempt in range(45):
+          started = time.monotonic()
+          time.sleep(2)
+          for process, before in workers:
               try:
-                  with urllib.request.urlopen('http://127.0.0.1:7860/api/health', timeout=3) as response:
-                      result = json.load(response)
-                  if result.get('status') == 'ok':
-                      print('Servidor atualizado. Padrão de áudio e exclusão de projetos disponíveis.')
-                      print('Revisão: eb4711c928f9b49baa087be358244d98a513dc5e')
-                      break
-              except (OSError, ValueError):
+                  ticks = (process / 'stat').read_text().rsplit(')', 1)[1].split()
+                  used = (int(ticks[11]) + int(ticks[12]) - before) / os.sysconf('SC_CLK_TCK')
+                  print('CPU_WORKER', round(100 * used / (time.monotonic() - started), 1))
+              except OSError:
                   pass
-              time.sleep(1)
-          else:
-              raise SystemExit('O servidor atualizado ainda não respondeu à sonda de disponibilidade.')
           PY
-          timeout 210s gh codespace ssh -c "$FAIXALAB_CODESPACE" -- -T python3 - < "$RUNNER_TEMP/apply-studio.py"
-      - name: Registrar resultado da atualização
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RESULTADO: ${{ job.status }}
-        run: |
-          resultado="$RESULTADO"
-          if [[ "$resultado" != success ]]; then resultado=failure; fi
-          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
-            --field "state=$resultado" --field 'context=faixalab/padrao-estudio-instalado' \
-            --field "target_url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          timeout 90s gh codespace ssh -c "$FAIXALAB_CODESPACE" -- -T python3 - < "$RUNNER_TEMP/recursos.py"
