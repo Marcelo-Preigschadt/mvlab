@@ -44,19 +44,29 @@ jobs:
           source = root / '.faixalab/source-b02a77486eda28341da84d948c5f4a0cec22dcc6'
           if not (root / '.git').exists() or not (source / '.git').exists():
               raise SystemExit('O checkout do FaixaLab não está no local esperado.')
+          socket_inodes = set()
+          for table in ('/proc/net/tcp', '/proc/net/tcp6'):
+              for line in Path(table).read_text().splitlines()[1:]:
+                  fields = line.split()
+                  if fields[1].split(':')[-1] == format(7860, '04X') and fields[3] == '0A':
+                      socket_inodes.add(fields[9])
           processes = []
           for item in Path('/proc').iterdir():
               if not item.name.isdigit():
                   continue
               try:
-                  args = (item / 'cmdline').read_bytes().split(bytes([0]))
-                  cwd = (item / 'cwd').resolve()
+                  for descriptor in (item / 'fd').iterdir():
+                      if os.readlink(descriptor) in {'socket:[' + inode + ']' for inode in socket_inodes}:
+                          processes.append(item)
+                          break
               except (OSError, PermissionError):
                   continue
-              if cwd == source / 'app' and b'7860' in args and any(Path(os.fsdecode(arg)).name == 'server.py' for arg in args if arg):
-                  processes.append(item)
           if len(processes) != 1:
-              raise SystemExit('Não foi possível identificar o processo atual do servidor.')
+              raise SystemExit('Não foi possível identificar o processo que atende à porta 7860.')
+          running_directory = (processes[0] / 'cwd').resolve()
+          if running_directory != (source / 'app').resolve():
+              print('Diretório do servidor:', str(running_directory))
+              raise SystemExit('O servidor usa um checkout diferente do esperado.')
           process = processes[0]
           environment = dict(os.fsdecode(part).split('=', 1) for part in (process / 'environ').read_bytes().split(bytes([0])) if b'=' in part)
           data = Path(environment.get('FAIXALAB_DATA_DIR', '/workspaces/.faixalab-data'))
