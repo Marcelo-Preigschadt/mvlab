@@ -70,7 +70,8 @@ pages_playback_revision=3e12252ac6a449e14cd47471e3f41846d8d624e1
 pages_session_revision=2aa918202387ed2a353435ae0c1ffd793b0de278
 pages_google_revision=bfea016b29c9403394e83f4c470ecfca4db01d8f
 portal_previous_revision=97638b9e24a155ace31dcf91514d7bd0677df906
-revision=f6607122c5d11638057f53377a8b5505415abac6
+studio_previous_revision=f6607122c5d11638057f53377a8b5505415abac6
+revision=eb4711c928f9b49baa087be358244d98a513dc5e
 repository=https://github.com/Marcelo-Preigschadt/FaixaLab.git
 # The installed virtual environment and model links depend on this path.
 source="$runtime/source-$previous_revision"
@@ -102,7 +103,7 @@ fi
   else
     case "$(git -C "$source" rev-parse HEAD)" in
       "$revision") ;;
-      "$portal_previous_revision"|"$previous_revision"|"$interface_revision"|"$origin_revision"|"$linked_audio_revision"|"$stemsplit_revision"|"$source_api_revision"|"$windows_bridge_revision"|"$youtube_cookie_revision"|"$pages_relay_revision"|"$pages_playback_revision"|"$pages_session_revision"|"$pages_google_revision")
+      "$studio_previous_revision"|"$portal_previous_revision"|"$previous_revision"|"$interface_revision"|"$origin_revision"|"$linked_audio_revision"|"$stemsplit_revision"|"$source_api_revision"|"$windows_bridge_revision"|"$youtube_cookie_revision"|"$pages_relay_revision"|"$pages_playback_revision"|"$pages_session_revision"|"$pages_google_revision")
         git -C "$source" fetch -q --depth=1 "$repository" "$revision"
         git -C "$source" checkout -q --detach "$revision"
         printf 'Código atualizado. Reinicie o servidor se ele já estiver em execução.\n'
@@ -166,7 +167,9 @@ if [[ ${CODESPACES:-} == true ]]; then
   fi
   export FAIXALAB_ENABLE_GOOGLE_PORTAL=1
   export FAIXALAB_PAGES_KEY
-  FAIXALAB_PAGES_KEY=$("$python" -c 'import secrets; print(secrets.token_urlsafe(32))')
+  if [[ -z ${FAIXALAB_PAGES_KEY:-} ]]; then
+    FAIXALAB_PAGES_KEY=$("$python" -c 'import secrets; print(secrets.token_urlsafe(32))')
+  fi
   env -u FAIXALAB_YOUTUBE_COOKIES "$python" -m faixalab.pages_gateway >"$FAIXALAB_DATA_DIR/pages-gateway.log" 2>&1 9>&- &
   pages_gateway_pid=$!
   trap 'kill "$pages_gateway_pid" 2>/dev/null || true; wait "$pages_gateway_pid" 2>/dev/null || true' EXIT
